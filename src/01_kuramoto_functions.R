@@ -25,7 +25,7 @@ kuramoto_order_parameter <- function(spacetime){
   return(r)
 }
 
-# Simple function to extract phase
+# Simple function to extract phase from the results of the seewave::ifreq function
 getphase <- function(data){
   data$p[,2]
 }
@@ -48,7 +48,7 @@ kur_fun <- function(data){
     mutate(across(where(is.numeric), 
                   ~imputeTS::na_interpolation(.x, option = "stine"))) #interpolate NA
   
-  # Scale and center
+  # Scale and center and box cox transform
   xmat = select(x, -time) %>% as.matrix() %>% t()
   times = 1:ncol(xmat)
   xmatclean = wsyn::cleandat(xmat, times, clev = 5)$cdat

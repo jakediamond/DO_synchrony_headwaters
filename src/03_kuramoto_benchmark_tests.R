@@ -22,11 +22,11 @@ source(file.path("src", "01_kuramoto_functions.R"))
 # Choose phase lag from 0 to pi
 # A phase lag of pi should result in r = 0 (complete asynchrony)
 # A phase lag of pi/2 should result in r = 0.67
-phase_lag <- pi / 4
+phase_lag <- pi/4
 n_days <- 7
 t <- seq(from = 0, to = n_days*24, by = 1)
-DO1 <- 100 + 20*(cos(t*2*pi/24)) + 5*rnorm(t) #maybe a 4-5th order river
-DO2 <- 70 + (2*cos(t*2*pi/24 + phase_lag)) + rnorm(t) #maybe a 1-2 order river 
+DO1 <- 100 + 20*(cos(t*2*pi/24)) + 15*rnorm(t) #maybe a 4-5th order river
+DO2 <- 70 + (2*cos(t*2*pi/24 + phase_lag)) + 2*rnorm(t) #maybe a 1-2 order river 
 
 # Take a quick look
 plot(DO1, type = "l", ylim = c(30,130))
