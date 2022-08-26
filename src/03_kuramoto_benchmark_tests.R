@@ -21,12 +21,12 @@ source(file.path("src", "01_kuramoto_functions.R"))
 # Generate 7 days of hourly data data with some noise
 # Choose phase lag from 0 to pi
 # A phase lag of pi should result in r = 0 (complete asynchrony)
-# A phase lag of pi/2 should result in r = 0.67
+# A phase lag of pi/2 should result in r = 0.7
 phase_lag <- pi/4
 n_days <- 7
 t <- seq(from = 0, to = n_days*24, by = 1)
-DO1 <- 100 + 20*(cos(t*2*pi/24)) + 15*rnorm(t) #maybe a 4-5th order river
-DO2 <- 70 + (2*cos(t*2*pi/24 + phase_lag)) + 2*rnorm(t) #maybe a 1-2 order river 
+DO1 <- 100 + 20*(sin((t-6)*2*pi/24 - phase_lag)) + 8*rnorm(t) #maybe a 4-5th order river, peak at 18h
+DO2 <- 70 + 2*(sin((t-6)*2*pi/24)) + 2*rnorm(t) #maybe a 1-2 order river, peaks at 12pm
 
 # Take a quick look
 plot(DO1, type = "l", ylim = c(30,130))
@@ -46,7 +46,8 @@ dat_filt <- dat %>%
   nest() %>%
   mutate(filt = map(data, ~lowpass_fun(., 0.1))) %>% #you can vary the cutoff frequency
   select(-data) %>%
-  unnest(filt)
+  unnest(filt) %>%
+  mutate(site = if_else(site == 1, "site 1" ,"site 2"))
 
 # Do the kuramoto on the filtered data
 dat2 <- select(dat_filt, site, time, value = filtered)
@@ -65,7 +66,7 @@ p_ts_comp <- dat_filt %>%
   scale_color_manual(values = c("orange", "blue")) +
   facet_wrap(~site, scales = "free", ncol = 1) +
   scale_x_datetime(date_breaks = "1 day",
-                   limits = c(min(dat$time), max(dat$time))) +
+                   limits = c(min(dat2$time), max(dat2$time))) +
   labs(x = "", y = expression(DO[sat]~"(%)")) +
   theme_bw() +
   theme(legend.title = element_blank(),
@@ -80,8 +81,8 @@ all_r <- left_join(r_test,
   pivot_longer(cols = c(value, filtered), values_to = "r")
 
 # Summarize average synchrony over the week
-rraw = round(mean(r_test$r), 3)
-rfilt = round(mean(r_test_filt$r), 3)
+rraw = round(mean(r_test$r), 2)
+rfilt = round(mean(r_test_filt$r), 2)
 
 # Plot of the two kuramoto timeseries
 p_r_comp <- ggplot(data = all_r,
@@ -92,12 +93,13 @@ p_r_comp <- ggplot(data = all_r,
   geom_line(size = 1.5) +
   scale_alpha_manual(values = c(1, 0.7)) +
   scale_color_manual(values = c("orange", "blue")) +
-  scale_x_datetime(date_breaks = "1 day") +
-  annotate("text", x = ymd_h(2020070100), y = 0.8, 
+  scale_x_datetime(date_breaks = "1 day", date_labels = "%H:%M",
+                   limits = c(min(dat2$time), max(dat2$time))) +
+  annotate("text", x = ymd_h(2020070212), y = 0.2,
            color = "orange", 
            label = paste0("bar(r)==",rfilt),
            parse = T) +
-  annotate("text", x = ymd_h(2020070100), y = 0.7, 
+  annotate("text", x = ymd_h(2020070212), y = 0.1, 
            color = "blue", 
            label = paste0("bar(r)==",rraw),
            parse = T) +
@@ -109,24 +111,29 @@ p_r_comp <- ggplot(data = all_r,
 # Final plot
 p <- (p_ts_comp / p_r_comp) + plot_layout(guides = 'collect')
 p
+ggsave(plot = p, 
+       filename = file.path("results", "supplementary", "filt_vs_not.png"),
+       dpi = 1200,
+       width = 18.4,
+       height = 12,
+       units = "cm")
 
 # Number of site and phase effects on Kuramoto ----------------------------
 # create a grid of treatments 
 trts <- expand.grid(nsites = seq(2, 30, 1), # number of sites (range used in this work)
-                    phase_lag = seq(0, pi, pi/4) # mean phase lag
+                    phase_lag = seq(0, pi, pi/6) # mean phase lag
                     )
 
-# Function to generate x sites of data with average phase shift
+# Function to generate n sites of data with p average phase shift
 dat_fun <- function(n, p){
   set.seed(42)
   n_days = 7 # days to model
   t = seq(from = 0, to = n_days*24, by = 1) #hourly time sequence
   sites = 1:n
-  shift = sites %% 2  #every other site apply the random shift to
+  shift = sites %% 2 * rnorm(n, p, p/8) #every other site apply the random shift to
   d = sites %>%
     setNames(sites) %>%
-    map2_dfc(shift, ~100 + 20*(cos(t*2*pi/24 + 
-                                     .y * rnorm(1, p, p/8)))) %>% #random phase shift
+    map2_dfc(shift, ~100 + 20*(sin((t-6)*2*pi/24 + .y))) %>% #random phase shift
     bind_cols(time = t) %>%
     mutate(time = ymd_h("2020070100") + hours(time)) %>%
     pivot_longer(1:all_of(n), names_to = "site")
@@ -159,9 +166,9 @@ p_lag_site <- ggplot(data = r_avg,
            fill = rmean)) +
   geom_tile() +
   theme_minimal() +
-  scale_y_continuous(breaks = seq(0, pi, pi / 4),
-                     labels = expression(0, frac(pi, 4), frac(pi, 2), 
-                                         frac(3*pi, 4), pi)) +
+  scale_y_continuous(breaks = seq(0, pi, pi / 6),
+                     labels = expression(0, frac(pi, 6), frac(pi, 3), frac(pi, 2),
+                                         frac(2*pi, 3), frac(5*pi, 6), pi)) +
   scale_fill_viridis_c(name = expression(bar(r)),
                        option = "E",
                        limits = c(0, 1)) +
@@ -170,4 +177,12 @@ p_lag_site <- ggplot(data = r_avg,
   theme(legend.position = "right")
 
 p_lag_site
+ggsave(plot = p_lag_site, 
+       filename = file.path("results", "supplementary", "sites_and_phase_effects.png"),
+       dpi = 1200,
+       width = 18.4,
+       height = 12,
+       units = "cm")
 
+
+# Some kind of benchmark test using the pairs

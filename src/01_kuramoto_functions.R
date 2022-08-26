@@ -51,7 +51,7 @@ kur_fun <- function(data){
   # Scale and center and box cox transform
   xmat = select(x, -time) %>% as.matrix() %>% t()
   times = 1:ncol(xmat)
-  xmatclean = wsyn::cleandat(xmat, times, clev = 5)$cdat
+  xmatclean = wsyn::cleandat(xmat, times, clev = 3)$cdat
   xclean = t(xmatclean) %>% as_tibble()
   # plot(xmatclean[4,])
   

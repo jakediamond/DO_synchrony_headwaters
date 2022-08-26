@@ -35,7 +35,7 @@ df_kur_h <- df %>%
 df_kur <- df_kur_h %>%
   select(-data) %>%
   ungroup() %>%
-  filter(kuramoto != "Error") %>%
+  dplyr::filter(kuramoto != "Error") %>%
   unnest(kuramoto) %>%
   rename(datetime = time) %>%
   mutate(date = date(datetime),
@@ -47,7 +47,7 @@ df_kur <- df_kur_h %>%
 
 
 
-p_all_daily <- ggplot(data = filter(df_kur, name != "lux") %>% drop_na(),
+p_all_daily <- ggplot(data = dplyr::filter(df_kur, name != "lux") %>% drop_na(),
                       aes(x = date,
                           y = r,
                           color = name,
@@ -78,3 +78,55 @@ p_all_daily <- ggplot(data = filter(df_kur, name != "lux") %>% drop_na(),
        title = "all sites",
        color = NULL)
 p_all_daily
+
+
+# Connected sites ---------------------------------------------------------
+
+# Plot all daily data
+p_all_con <- ggplot(data = filter(df_kur_con_p, type != "lux") %>% drop_na(),
+                    aes(x = date,
+                        y = r,
+                        color= type,
+                        group = interaction(type, year))) +
+  geom_point(alpha = 0.4, size = 0.9) +
+  facet_grid(~year, scales = "free_x", space = "free_x") +
+  stat_smooth(se = FALSE, span = 0.15) +
+  scale_color_manual(values = c("black", "#ff0000", "#f2ad00"),
+                     breaks = c("DO", "temp", "light"),
+                     labels = c("DO sat.", "temp.", "light")) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%m/%y") +
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.25)) +
+  theme_bw(base_size = 11) +
+  theme(legend.position = "none",
+        panel.grid.major.y = element_blank(), panel.grid.minor.y = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        axis.title.x = element_blank()) +
+  labs(x = "",
+       y = "synchrony (-)",
+       title = "flow-connected sites")
+p_all_con
+pcon <- p_all_con + p_q + plot_layout(design = layout)
+pcon
+
+p_kur_fig1 <- p_all_daily / pcon + plot_annotation(tag_levels = "a")
+p_kur_fig1
+ggsave(plot = p_kur_fig1,
+       filename = "Headwaters/Figures/kuramoto_network_connected_newlight_v2.png",
+       dpi = 600,
+       width = 18.4,
+       height = 15,
+       units = "cm")
+
+
+
+df_p <- df_kur_con_p %>%
+  pivot_wider(names_from = type, values_from = r)
+
+ggplot(data = filter(df_p, year(date) == 2020, month(date) < 10),
+       aes(x = light, y = DO)) +
+  geom_point() +
+  ggpubr::stat_cor(aes(label = ..rr.label..))
+
+
+
