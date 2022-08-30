@@ -48,12 +48,11 @@ kur_fun <- function(data){
     mutate(across(where(is.numeric), 
                   ~imputeTS::na_interpolation(.x, option = "stine"))) #interpolate NA
   
-  # Scale and center and box cox transform
+  # Scale (z-score) and detrend
   xmat = select(x, -time) %>% as.matrix() %>% t()
   times = 1:ncol(xmat)
   xmatclean = wsyn::cleandat(xmat, times, clev = 3)$cdat
   xclean = t(xmatclean) %>% as_tibble()
-  # plot(xmatclean[4,])
   
   # Calculate instantaneous phases by site
   xp = xclean %>%
@@ -81,7 +80,7 @@ kur_fun <- function(data){
   
   rx = kuramoto_order_parameter(xf)
   
-  # as dataframe for clean plotting, summarized by day
+  # as dataframe for clean plotting
   df_x = select(x, time) %>% 
     bind_cols(r = rx, nsites = nsites)
 }

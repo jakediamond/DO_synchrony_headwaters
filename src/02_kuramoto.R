@@ -1,5 +1,5 @@
 # 
-# Purpose: To grab all DO and light data in clean dataframes
+# Purpose: To calculate kuramoto among all sites and only connected sites
 # Author: Jake Diamond
 # Date: July 20, 2020
 # 
@@ -45,88 +45,31 @@ df_kur <- df_kur_h %>%
   summarize(r = mean(r),
             sd = mean(sd))
 
-
-
-p_all_daily <- ggplot(data = dplyr::filter(df_kur, name != "lux") %>% drop_na(),
-                      aes(x = date,
-                          y = r,
-                          color = name,
-                          group = interaction(name, year))) + 
-  geom_point(alpha = 0.4, size = 0.9) +
-  # geom_ribbon(aes(ymax = r +sd, ymin = r-sd, alpha = 0.4)) +
-  facet_grid(~year, scales = "free_x", space = "free_x") +
-  stat_smooth(se = FALSE, span = 0.15) +
-  scale_color_manual(values = c("black", "#ff0000", "#f2ad00"),
-                     breaks = c("DO", "temp", "light"),
-                     # name = "variable",
-                     labels = c("DO", "temp.", "light")) +
-  scale_x_date(date_breaks = "1 month", date_labels = "%m/%y") +
-  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.25)) +
-  theme_bw(base_size = 11) +
-  theme(legend.position = c(0.45, 0.23),
-        strip.text = element_blank(),
-        strip.background = element_blank(),
-        # legend.box.background = element_rect(color = "black", fill = "transparent"),
-        legend.background = element_rect(color = "black", fill = "transparent"),
-        legend.key = element_rect(fill = "transparent"),
-        legend.margin = margin(t = 0, unit='cm'),
-        panel.grid.major.y = element_blank(), 
-        panel.grid.minor.y = element_blank(),
-        axis.title.x = element_blank()) +
-  labs(x = "",
-       y = "synchrony (-)",
-       title = "all sites",
-       color = NULL)
-p_all_daily
-
-
+saveRDS(df_kur, file.path("results", "kuramoto_all_sites.RDS"))
 # Connected sites ---------------------------------------------------------
+# Load connected site data
+df_con <- readRDS(file.path("data", "connected_data_long.RDS"))
 
-# Plot all daily data
-p_all_con <- ggplot(data = filter(df_kur_con_p, type != "lux") %>% drop_na(),
-                    aes(x = date,
-                        y = r,
-                        color= type,
-                        group = interaction(type, year))) +
-  geom_point(alpha = 0.4, size = 0.9) +
-  facet_grid(~year, scales = "free_x", space = "free_x") +
-  stat_smooth(se = FALSE, span = 0.15) +
-  scale_color_manual(values = c("black", "#ff0000", "#f2ad00"),
-                     breaks = c("DO", "temp", "light"),
-                     labels = c("DO sat.", "temp.", "light")) +
-  scale_x_date(date_breaks = "1 month", date_labels = "%m/%y") +
-  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.25)) +
-  theme_bw(base_size = 11) +
-  theme(legend.position = "none",
-        panel.grid.major.y = element_blank(), panel.grid.minor.y = element_blank(),
-        strip.text = element_blank(),
-        strip.background = element_blank(),
-        axis.title.x = element_blank()) +
-  labs(x = "",
-       y = "synchrony (-)",
-       title = "flow-connected sites")
-p_all_con
-pcon <- p_all_con + p_q + plot_layout(design = layout)
-pcon
+# Kuramoto on hourly data
+df_con_kur <- df_con %>%
+  ungroup() %>%
+  group_by(watershed, site1, site2, type, year, week) %>%
+  arrange(name, time) %>%
+  rename(site = name) %>%
+  nest() %>%
+  mutate(kuramoto = map_progress(data, kur_fun)) 
 
-p_kur_fig1 <- p_all_daily / pcon + plot_annotation(tag_levels = "a")
-p_kur_fig1
-ggsave(plot = p_kur_fig1,
-       filename = "Headwaters/Figures/kuramoto_network_connected_newlight_v2.png",
-       dpi = 600,
-       width = 18.4,
-       height = 15,
-       units = "cm")
-
-
-
-df_p <- df_kur_con_p %>%
-  pivot_wider(names_from = type, values_from = r)
-
-ggplot(data = filter(df_p, year(date) == 2020, month(date) < 10),
-       aes(x = light, y = DO)) +
-  geom_point() +
-  ggpubr::stat_cor(aes(label = ..rr.label..))
-
-
-
+# Get into format for plotting
+df_con_kur_p <- df_con_kur %>%
+  select(-data) %>%
+  ungroup() %>%
+  dplyr::filter(kuramoto != "Error") %>%
+  unnest(kuramoto) %>%
+  rename(datetime = time) %>%
+  mutate(date = date(datetime),
+         sd = sqrt(1-1/nsites)/nsites,
+         r = if_else(between(datetime, ymd_h("2019110500"), ymd_h("2020030100")), NA_real_, r)) %>%
+  group_by(type, date, year) %>%
+  summarize(r = mean(r),
+            sd = mean(sd))
+saveRDS(df_con_kur_p, file.path("results", "kuramoto_connected.RDS"))
