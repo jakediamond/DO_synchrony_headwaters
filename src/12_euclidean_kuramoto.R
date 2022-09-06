@@ -8,6 +8,7 @@
 library(readxl)
 library(lubridate)
 library(sf)
+library(scales)
 library(tidyverse)
 library(tidytable) #to run things a bit faster for the larger dataframes
 
@@ -70,17 +71,50 @@ df_bins <- filter(df, type!="lux",
             d = mean(eucdist_m, na.rm = T)) %>%
   drop_na()
 
-p <- ggplot(data = df_bins, 
-       aes(x = -d,
-           y = rm,
-           linetype = con),
-       color = "blue")  +
+# Average the data by site pair
+df_grp <- filter(df, type!="lux",
+                 year == 2020,
+                 month(date) > 2) %>%
+  group_by(type, con, site1, site2) %>%
+  # mutate(brk = ntile(log(eucdist_m), 100)) %>%
+  group_by(site1, site2, type, con) %>%
+  summarize(rm = mean(r, na.rm = T),
+            rse = sd(r, na.rm = T) / sqrt(n()),
+            d = mean(eucdist_m, na.rm = T)) %>%
+  drop_na()
+
+
+# Model info
+df_bins$w = 1/(df_bins$rse)^2 
+mod_bins_con <- mgcv::gam(formula = rm ~ s(d), weights=w, 
+                          data=filter(df_bins, con == "connected"))
+mod_bins_un <- mgcv::gam(formula = rm ~ s(d), weights=w, 
+                          data=filter(df_bins, con == "unconnected"))
+pred_bins_con <- data.frame(d=df_bins$d, fitted=mod_bins_con$fitted.values)
+pred_bins_un <- data.frame(d=df_bins$d, fitted=mod_bins_un$fitted.values)
+
+# Plot
+p <- ggplot(data = filter(df, eucdist_m>0, type!="lux"), 
+       aes(x = eucdist_m,
+           y = r,
+           linetype = con))  +
+  scale_x_continuous(
+    trans  = compose_trans("log10", "reverse")
+  ) +
   # geom_point() +
-  # geom_errorbar(aes(ymin = rm - rse, ymax = rm + rse)) + 
+  # geom_errorbar(aes(ymin = rm - rse, ymax = rm + rse)) +
   facet_grid(cols = vars(type)) +
   scale_linetype_discrete(name = "flow-connectivity") +
   theme_bw() +
-  geom_smooth() +
+  annotation_logticks(sides = "b") +
+  theme(panel.grid.minor = element_blank(),
+        legend.position = c(0.85, 0.25),
+        strip.background = element_blank()) +
+  # geom_line(data=pred_bins_con,aes(d, fitted), col='steelblue', lwd=1.2) +
+  # geom_line(data=pred_bins_un,aes(d, fitted), col='red', lwd=1.2) +
+  stat_smooth(method = "gam", level = 0.999,
+              formula = y ~ s(x, k = 4),
+              color = "blue") +
   # geom_smooth(method = "lm", se = FALSE) +
   # ggpubr::stat_regline_equation(label.y = 0.64,
   #   aes(label =  paste(..eq.label.., ..rr.label.., sep = "~~~~"))) +
